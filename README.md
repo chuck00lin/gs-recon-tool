@@ -15,7 +15,11 @@ the CLI without change.
 
 ## 快速啟用
 
-這個tool包含從影片處理到3DGS訓練的過程。每一個階段可以依照你需要的參數做設定，video 轉frame 的步驟可以先選寬鬆的，過濾多一點照片先快速建立看看。SfM步驟第一次建議用OPENCV相機設置+exhaustive matcher + COLMAP mapper. Splat 可以先設置7000 iter 測試，然後訓練出來的3DGS ply 可以直接drop 到https://superspl.at/editor 去看，have fun。
+這個tool包含從影片處理到3DGS訓練的過程。每一個階段可以依照你需要的參數做設定，tool裡面在初次嘗試下，可以依照以下調:
+
+- video 轉frame 的步驟可以先選寬鬆的，過濾多一點照片先快速建立看看。
+- SfM步驟第一次建議用OPENCV相機設置+exhaustive matcher + COLMAP mapper. 
+- Splat 可以先設置7000 iter 測試，然後訓練出來的3DGS ply 可以直接drop 到https://superspl.at/editor 去看，have fun。
 
 ```bash
 # 1. 安裝（pipx 會建立隔離環境，不會汙染你的 conda）
@@ -165,10 +169,7 @@ one does.
   — MIT, © 2023 Sebastiaan Meijer. The sharpness-based frame selection in
   `tools/image_selector.py` and `tools/ascii_graph.py` is derived from it. Full licence text
   in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- **[bblabNTU/nerf-preprocessing-tools](https://github.com/bblabNTU/nerf-preprocessing-tools)**
-  — the lab's fork, source of the video extraction CLI.
-- The pipeline orchestration originates in `pipeline_assist_gui.py` from the lab's internal
-  `3dplant-workflow` repository.
+- The pipeline orchestration originates from the lab's internal BBLAB repository.
 
 ### Viewing the output
 
