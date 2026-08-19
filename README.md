@@ -15,9 +15,12 @@ the CLI without change.
 
 ## 快速開始（實驗室成員）
 
+這是私有 repo，先確認你的 GitHub 帳號已被加為協作者，且這台機器的 SSH key 已加到 GitHub
+（測試：`ssh -T git@github.com` 要回你的帳號名）。
+
 ```bash
-# 1. 安裝（pipx 會自動建立隔離環境，不會汙染你的 conda）
-pipx install "gs-recon-tool[gui] @ git+https://github.com/chuck00lin/gs-recon-tool"
+# 1. 安裝（pipx 會建立隔離環境，不會汙染你的 conda）
+pipx install "gs-recon-tool[gui] @ git+ssh://git@github.com/chuck00lin/gs-recon-tool"
 
 # 2. 檢查這台機器缺什麼 —— 每個問題都會附上修復指令
 gs-recon doctor
@@ -37,9 +40,11 @@ gs-recon gui
 ## Install
 
 Requires Linux, an NVIDIA GPU, Docker with the NVIDIA Container Toolkit, and Python 3.9+.
+This repository is private, so you need collaborator access and an SSH key registered with
+GitHub (`ssh -T git@github.com` should greet you by name).
 
 ```bash
-pipx install "gs-recon-tool[gui] @ git+https://github.com/chuck00lin/gs-recon-tool"
+pipx install "gs-recon-tool[gui] @ git+ssh://git@github.com/chuck00lin/gs-recon-tool"
 gs-recon doctor          # tells you exactly what is still missing
 gs-recon setup --all     # pulls images and downloads the vocabulary tree
 ```

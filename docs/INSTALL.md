@@ -31,12 +31,26 @@ docker run --rm --gpus all ubuntu:22.04 nvidia-smi -L   # should list your GPU
 
 ## Install the tool
 
-`pipx` is recommended: it puts the tool in its own virtual environment, so it cannot break
-(or be broken by) your conda environments.
+This repository is private. Before installing, make sure your GitHub account has been added
+as a collaborator and that this machine's SSH key is registered with GitHub:
+
+```bash
+ssh -T git@github.com     # should greet you by username
+```
+
+If it does not, generate a key and add the public half at <https://github.com/settings/keys>:
+
+```bash
+ssh-keygen -t ed25519 -C "$USER@$(hostname)"
+cat ~/.ssh/id_ed25519.pub
+```
+
+`pipx` is recommended for the install itself: it puts the tool in its own virtual environment,
+so it cannot break (or be broken by) your conda environments.
 
 ```bash
 python3 -m pip install --user pipx && python3 -m pipx ensurepath
-pipx install "gs-recon-tool[gui] @ git+https://github.com/chuck00lin/gs-recon-tool"
+pipx install "gs-recon-tool[gui] @ git+ssh://git@github.com/chuck00lin/gs-recon-tool"
 ```
 
 <details>
@@ -44,11 +58,14 @@ pipx install "gs-recon-tool[gui] @ git+https://github.com/chuck00lin/gs-recon-to
 
 ```bash
 # plain pip, into whatever environment is active
-pip install "gs-recon-tool[gui] @ git+https://github.com/chuck00lin/gs-recon-tool"
+pip install "gs-recon-tool[gui] @ git+ssh://git@github.com/chuck00lin/gs-recon-tool"
 
 # from a local clone, editable, for development
-git clone https://github.com/chuck00lin/gs-recon-tool
+git clone git@github.com:chuck00lin/gs-recon-tool.git
 cd gs-recon-tool && pip install -e ".[gui,dev]"
+
+# upgrading later
+pipx upgrade gs-recon-tool
 ```
 
 Drop `[gui]` if you only want the CLI — that skips the PyQt6 dependency.
