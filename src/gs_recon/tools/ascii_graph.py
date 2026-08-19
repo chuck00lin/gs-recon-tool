@@ -1,5 +1,9 @@
 """Tiny sparkline renderer for terminal progress feedback.
 
+Derived from SharkWipf/nerf_dataset_preprocessing_helper (MIT, (c) 2023 Sebastiaan Meijer):
+https://github.com/SharkWipf/nerf_dataset_preprocessing_helper
+See THIRD_PARTY_NOTICES.md for the full licence text.
+
 Named ``ascii_graph`` rather than ``graphlib`` on purpose: the original helper
 shadowed Python 3.9+'s stdlib ``graphlib`` whenever its directory landed on
 sys.path, which broke unrelated imports.

@@ -1,5 +1,9 @@
 """Pick the sharpest frames, spread evenly across the capture.
 
+Derived from SharkWipf/nerf_dataset_preprocessing_helper (MIT, (c) 2023 Sebastiaan Meijer):
+https://github.com/SharkWipf/nerf_dataset_preprocessing_helper
+See THIRD_PARTY_NOTICES.md for the full licence text.
+
 Sharpness is the variance of the Laplacian. Naively taking the globally
 sharpest N frames clumps the selection into whichever part of the orbit was
 best lit, which starves SfM elsewhere; splitting the sequence into groups and

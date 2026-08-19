@@ -461,9 +461,10 @@ class MainWindow(QMainWindow):
         quality = QGroupBox("Quality options")
         qlayout = QVBoxLayout(quality)
         self.chk_ppisp = self._check(
-            "Per-image appearance (--ppisp)",
-            "Learns per-camera exposure and white balance. Recommended for "
-            "orbit captures where lighting changes as you walk around.",
+            "Per-camera appearance (--ppisp)",
+            "LichtFeld's physically-plausible ISP: learns per-camera exposure and "
+            "white balance. Recommended for orbit captures where lighting changes "
+            "as you walk around.",
         )
         self.chk_ppisp.setChecked(True)
         self.chk_mip = self._check(

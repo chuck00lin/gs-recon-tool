@@ -123,15 +123,58 @@ the hours that already succeeded. `gs-recon doctor` diagnoses the environment;
 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) covers the failures that are not the
 environment's fault.
 
-## What this replaces
+## References and credits
 
-This is a packaged, portable version of `pipeline_assist_gui.py` from the internal
-`3dplant-workflow` repository. The behaviour is the same; what changed is that hard-coded
-paths became configuration, the command builders were separated from the Qt widgets so a CLI
-became possible, and the LichtFeld container is now started per run with your dataset
-explicitly bind-mounted — which is what lets it work on a machine that is not the one it was
-written on.
+gs-recon-tool is orchestration. Every reconstruction step is somebody else's work running in
+a container — if you publish results from this pipeline, cite the projects below rather than
+this repository.
+
+### Tools this pipeline drives
+
+| Project | Role here | Licence |
+|---|---|---|
+| [COLMAP](https://github.com/colmap/colmap) | Feature extraction, matching, undistortion, model conversion | BSD-3-Clause |
+| [GLOMAP](https://github.com/colmap/glomap) | Global SfM mapper (the default) | BSD-3-Clause |
+| [LichtFeld Studio](https://github.com/MrNeRF/LichtFeld-Studio) | 3DGS training and checkpoint→PLY conversion | GPLv3 |
+| [jinwj1996/glomap](https://hub.docker.com/r/jinwj1996/glomap) | Prebuilt image carrying both COLMAP and GLOMAP | — |
+| [COLMAP vocabulary tree](https://demuc.de/colmap/) | Loop closure for the `sequential-loop` matcher | — |
+
+These run as separate programs in their own containers; nothing here is linked against them.
+
+### Methods those tools implement
+
+- **Structure-from-Motion** — Schönberger & Frahm, *Structure-from-Motion Revisited*,
+  CVPR 2016. <https://colmap.github.io>
+- **Global SfM** — Pan, Barath, Pollefeys & Schönberger, *Global Structure-from-Motion
+  Revisited*, ECCV 2024.
+- **3D Gaussian Splatting** — Kerbl, Kopanas, Leimkühler & Drettakis, SIGGRAPH 2023.
+  [project page](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/) ·
+  [code](https://github.com/graphdeco-inria/gaussian-splatting)
+- **3DGUT** — the `--gut` mode this release pins, from NVIDIA's Toronto AI Lab.
+  [project page](https://research.nvidia.com/labs/toronto-ai/3DGUT/). LichtFeld's
+  implementation is based on
+  [this gsplat pull request](https://github.com/nerfstudio-project/gsplat/pull/667).
+
+`--ppisp`, `--enable-mip` and `--bilateral-grid` are LichtFeld Studio features; see its
+[documentation](https://github.com/MrNeRF/LichtFeld-Studio/tree/master/docs) for what each
+one does.
+
+### Code this repository derives from
+
+- **[SharkWipf/nerf_dataset_preprocessing_helper](https://github.com/SharkWipf/nerf_dataset_preprocessing_helper)**
+  — MIT, © 2023 Sebastiaan Meijer. The sharpness-based frame selection in
+  `tools/image_selector.py` and `tools/ascii_graph.py` is derived from it. Full licence text
+  in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **[bblabNTU/nerf-preprocessing-tools](https://github.com/bblabNTU/nerf-preprocessing-tools)**
+  — the lab's fork, source of the video extraction CLI.
+- The pipeline orchestration originates in `pipeline_assist_gui.py` from the lab's internal
+  `3dplant-workflow` repository.
+
+### Viewing the output
+
+Drop the resulting `.ply` into [SuperSplat](https://superspl.at/editor)
+([source](https://github.com/playcanvas/supersplat)).
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
