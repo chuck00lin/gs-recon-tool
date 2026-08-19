@@ -1,0 +1,64 @@
+# gs-recon-tool configuration
+#
+# Generate a fresh one with `gs-recon init`, or design a run in the GUI and
+# press "Save config". Use it with:  gs-recon run video.mp4 -c this-file.yaml
+#
+# Every key is documented in docs/CONFIG.md.
+
+version: 1
+
+docker:
+  colmap_image: jinwj1996/glomap
+  lfs_image: lichtfeld-studio:latest
+  # Host folder containing build/LichtFeld-Studio. Leave empty to autodetect.
+  lfs_repo_host: ''
+  # Container path to mount it at. 'auto' probes the image for the user it was
+  # built for; the binary's RUNPATH is absolute so this is not a free choice.
+  lfs_repo_container: auto
+  gpus: all              # or device=0 to pin a single GPU
+  extra_run_args: []     # e.g. ['--shm-size=8g']
+
+frames:
+  enabled: true
+  sample_rate_fps: 15
+  rotation: 0            # 0, 90 or -90
+  jpeg_quality: 100
+  resolution: original   # original | half | quarter | eighth | custom
+  custom_width: 1280
+  trim_start: 0.0        # seconds to drop from the start (walking up to the subject)
+  trim_end: 0.0
+  filter:
+    mode: balanced       # balanced | quality | custom
+    target: 20%          # a percentage, or an absolute count like 300
+    scalar: 2
+    groups: 20
+
+sfm:
+  enabled: true
+  camera_model: OPENCV
+  matcher: sequential-loop
+  mapper: glomap
+  undistort: false       # GUT mode handles distortion natively
+  reorganize: false
+  orient: false
+  convert: TXT+PLY
+  loop_overlap: 30
+  loop_detection_num_images: 100
+  loop_detection_period: 5
+
+splat:
+  enabled: true
+  iterations: 30000
+  headless: true
+  max_cap: 1000000       # null to let LichtFeld decide
+  ppisp: true            # per-camera exposure/white balance
+  enable_mip: true       # anti-aliasing
+  bilateral_grid: false  # conflicts with ppisp -- enable one, not both
+  undistort: false
+  extra_args: ''         # e.g. '--strategy mcmc --sh-degree 2'
+  export_ply: auto       # 'auto' -> splat_<iterations>.ply, matching LichtFeld's own naming
+  prune:
+    enabled: true
+    alpha: 0.005
+    percentile: 99.0
+    margin: 1.0

@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.DS_Store
+
+# Downloaded assets (fetched by `gs-recon setup --assets`)
+assets/vocab_trees/*.bin
+
+# Local user config / run artifacts
+*.local.yaml

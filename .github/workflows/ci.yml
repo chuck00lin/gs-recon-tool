@@ -1,0 +1,23 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # The GUI extra is deliberately omitted: the suite covers the command
+      # builders and config, which is what both front ends share, and pulling
+      # Qt into CI buys nothing but minutes.
+      - run: pip install -e ".[dev]"
+      - run: pytest -q

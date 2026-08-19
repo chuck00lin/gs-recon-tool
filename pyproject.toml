@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gs-recon-tool"
+version = "1.0.0"
+description = "Video to 3D Gaussian Splatting reconstruction pipeline (frames -> COLMAP/GLOMAP SfM -> LichtFeld Studio), with both a CLI and a GUI."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Chuck Lin", email = "d11631001@g.ntu.edu.tw" }]
+keywords = ["gaussian-splatting", "colmap", "glomap", "photogrammetry", "3d-reconstruction"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+dependencies = [
+    "PyYAML>=5.4",
+    "numpy>=1.20",
+    "opencv-python>=4.5",
+    "tqdm>=4.60",
+]
+
+[project.optional-dependencies]
+gui = ["PyQt6>=6.4"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+gs-recon = "gs_recon.cli:main"
+gs-recon-gui = "gs_recon.gui.app:main"
+
+[project.urls]
+Homepage = "https://github.com/chuck00lin/gs-recon-tool"
+Issues = "https://github.com/chuck00lin/gs-recon-tool/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+gs_recon = ["gui/*.qss"]
