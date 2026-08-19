@@ -13,10 +13,9 @@ the CLI without change.
 
 ---
 
-## 快速開始（實驗室成員）
+## 快速啟用
 
-這是私有 repo，先確認你的 GitHub 帳號已被加為協作者，且這台機器的 SSH key 已加到 GitHub
-（測試：`ssh -T git@github.com` 要回你的帳號名）。
+這個tool包含從影片處理到3DGS訓練的過程。每一個階段可以依照你需要的參數做設定，video 轉frame 的步驟可以先選寬鬆的，過濾多一點照片先快速建立看看。SfM步驟第一次建議用OPENCV相機設置+exhaustive matcher + COLMAP mapper. Splat 可以先設置7000 iter 測試，然後訓練出來的3DGS ply 可以直接drop 到https://superspl.at/editor 去看，have fun。
 
 ```bash
 # 1. 安裝（pipx 會建立隔離環境，不會汙染你的 conda）
