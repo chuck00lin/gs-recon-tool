@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gs-recon-tool"
-version = "1.0.0"
+version = "1.1.0"
 description = "Video to 3D Gaussian Splatting reconstruction pipeline (frames -> COLMAP/GLOMAP SfM -> LichtFeld Studio), with both a CLI and a GUI."
 readme = "README.md"
 requires-python = ">=3.9"

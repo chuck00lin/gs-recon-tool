@@ -100,14 +100,41 @@ gs-recon run video.mp4 --start-at 7
 
 The GUI shows a **Resume from step N** button.
 
-### Stopping leaves a container running
+### Stop does not stop the training
 
-`gs-recon` terminates the whole process group, so `docker run --rm` containers stop and clean
-themselves up. If one survives a hard kill:
+Fixed in 1.1.0. A container's PID 1 — an entrypoint script, or the `bash -lc` wrapper around
+the training command — ignores SIGTERM by kernel rule, so the polite stop signal went
+nowhere and training ran on with the pipeline stuck reading its output. Containers now start
+with `--init`, which puts a real init process at PID 1 to forward the signal, and each
+`docker run` is named `gsr-<token>-<step>` so it can be killed outright if the signal is
+ignored anyway. Stop takes well under a second; a stubborn command is killed after 10.
+
+If one ever survives:
 
 ```bash
-docker ps          # find it
-docker stop <id>
+docker ps                      # gs-recon's own containers are named gsr-*
+docker kill <name>
+```
+
+### The reconstruction is fragmented, and `images/` jumps around
+
+Symptom: sorting `images/` by name walks forward through the capture, then suddenly jumps
+backwards to the middle. COLMAP's sequential matcher reads filename order as capture order,
+so this matches frames that were never neighbours and the model breaks up.
+
+Two causes, both fixed in 1.1.0 but both able to leave bad folders behind from an earlier
+run:
+
+- Extraction used to leave the previous run's frames in place, so re-running at a different
+  sample rate produced two interleaved captures in one folder.
+- Names were zero-padded to four digits, so past 9999 frames `frame_10000.jpg` sorted
+  between `frame_1000` and `frame_1001`.
+
+To repair an affected project, delete the folder and extract again:
+
+```bash
+rm -rf ./plantA-frames/images
+gs-recon run plantA.mp4 --only frames
 ```
 
 ---

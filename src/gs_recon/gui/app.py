@@ -15,6 +15,8 @@ from __future__ import annotations
 import pathlib
 import shlex
 import sys
+import threading
+import time
 from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
@@ -56,9 +58,18 @@ from ..config import (
     RESOLUTIONS,
     Config,
 )
-from ..pipeline import Plan, ProjectInput, build_plan, discover_inputs, ensure_project_dirs
+from ..pipeline import (
+    Plan,
+    ProjectInput,
+    build_plan,
+    discover_inputs,
+    ensure_project_dirs,
+    estimate_extracted_frames,
+    probe_video,
+)
 from ..runner import Runner
 from ..stages.splat import SplatConfigError
+from ..tools.grouping import DEFAULT_GROUP_SIZE, MIN_GROUP_SIZE
 from . import theme
 from .widgets import GLYPH, TextDialog, form, hint, row
 
@@ -69,11 +80,13 @@ VIDEO_FILTER = "Videos (*.mp4 *.MP4 *.mov *.MOV *.avi *.mkv *.m4v);;All files (*
 PRESETS: dict[str, dict] = {
     "Balanced (default)": {},
     "Fast draft": {
-        "frames": {"sample_rate_fps": 10, "filter": {"target": "15%"}},
+        # group_size tracks the keep rate: ~2 survivors per group is the point
+        # where the sharpness test has a choice but the winners cannot clump.
+        "frames": {"sample_rate_fps": 10, "filter": {"target": "15%", "group_size": 13}},
         "splat": {"iterations": 7000, "max_cap": 500000, "enable_mip": False},
     },
     "High quality": {
-        "frames": {"sample_rate_fps": 20, "filter": {"target": "35%"}},
+        "frames": {"sample_rate_fps": 20, "filter": {"target": "35%", "group_size": 6}},
         "splat": {"iterations": 50000, "max_cap": 2000000, "enable_mip": True, "ppisp": True},
     },
 }
@@ -81,27 +94,62 @@ PRESETS: dict[str, dict] = {
 
 # ---------------------------------------------------------------------------
 class RunnerThread(QThread):
-    log = pyqtSignal(str)
+    """Runs the pipeline off the GUI thread and feeds output back in batches.
+
+    Batching is not an optimisation, it is what keeps the Stop button usable:
+    training prints a progress line per iteration, and one queued signal plus
+    one widget update per line saturates the event loop so thoroughly that
+    clicks are never processed.
+    """
+
+    log = pyqtSignal(str)                    # a batch of lines, newline-joined
     step_started = pyqtSignal(int, int)      # flat index, total
     step_finished = pyqtSignal(int, int)     # flat index, return code
     done = pyqtSignal(bool, int)             # success, failed index (-1 if none)
+
+    FLUSH_INTERVAL = 0.1                     # seconds
 
     def __init__(self, plan: Plan, start_from: int = 0):
         super().__init__()
         self.plan = plan
         self._start_from = start_from
+        self._buffer: list[str] = []
+        self._buffer_lock = threading.Lock()
+        self._last_flush = 0.0
         self._runner = Runner(
             plan,
-            on_log=self.log.emit,
+            on_log=self._queue_log,
             on_step_start=lambda step, index, total: self.step_started.emit(index, total),
-            on_step_end=lambda step, index, rc: self.step_finished.emit(index, rc),
+            on_step_end=lambda step, index, rc: self._on_step_end(index, rc),
         )
 
+    # -- logging -----------------------------------------------------------
+    def _queue_log(self, line: str) -> None:
+        with self._buffer_lock:
+            self._buffer.append(line)
+        if time.monotonic() - self._last_flush >= self.FLUSH_INTERVAL:
+            self.flush_logs()
+
+    def flush_logs(self) -> None:
+        """Emit whatever has accumulated. Safe to call from either thread."""
+        with self._buffer_lock:
+            if not self._buffer:
+                return
+            batch, self._buffer = self._buffer, []
+        self._last_flush = time.monotonic()
+        self.log.emit("\n".join(batch))
+
+    def _on_step_end(self, index: int, rc: int) -> None:
+        self.flush_logs()
+        self.step_finished.emit(index, rc)
+
+    # -- lifecycle ---------------------------------------------------------
     def stop(self) -> None:
         self._runner.stop()
 
     def run(self) -> None:  # noqa: D102 - QThread entry point
         result = self._runner.run(start_from=self._start_from)
+        self.flush_logs()
         self.done.emit(result.success, -1 if result.failed_index is None else result.failed_index)
 
 
@@ -125,7 +173,14 @@ class MainWindow(QMainWindow):
         self._refresh_timer.setInterval(180)
         self._refresh_timer.timeout.connect(self._rebuild_tree)
 
+        # Pulls whatever the runner has buffered, so a quiet command still
+        # shows its last lines promptly.
+        self._log_timer = QTimer(self)
+        self._log_timer.setInterval(150)
+        self._log_timer.timeout.connect(self._drain_log)
+
         self._build_ui()
+        self._connect_live_math()
         self._apply_config(Config.resolve(config_path))
         self._rebuild_tree()
 
@@ -324,6 +379,10 @@ class MainWindow(QMainWindow):
 
         self.sp_trim_end = self._dspin(0.0, 600.0, 0.0, 0.5, "Seconds to drop from the end of the clip")
         layout.addRow("Trim end (s)", self.sp_trim_end)
+
+        self.lbl_extract_math = hint("")
+        self.lbl_extract_math.setObjectName("liveMath")
+        layout.addRow(self.lbl_extract_math)
         outer.addWidget(extraction)
 
         filtering = QGroupBox("Sharpness filtering")
@@ -345,11 +404,23 @@ class MainWindow(QMainWindow):
         self.ed_filter_target.textChanged.connect(self._schedule_refresh)
         flayout.addRow("Keep", self.ed_filter_target)
 
-        self.sp_filter_scalar = self._spin(1, 10, 2, "Higher merges frames into fewer, larger groups (balanced mode)")
-        flayout.addRow("Scalar", self.sp_filter_scalar)
+        self.sp_group_size = self._spin(
+            MIN_GROUP_SIZE, 500, DEFAULT_GROUP_SIZE,
+            "How many consecutive frames compete against each other. The "
+            "sharpest of each group survive, so a small group size spreads the "
+            "selection evenly and a large one favours sharpness over coverage.",
+        )
+        flayout.addRow("Frames per group", self.sp_group_size)
 
         self.sp_filter_groups = self._spin(1, 1000, 20, "Explicit number of groups (custom mode)")
         flayout.addRow("Groups", self.sp_filter_groups)
+
+        # Recomputed on every edit, from the real length of the loaded clips:
+        # the group size only means something next to the frame count it
+        # divides, and waiting until the run to find that out is too late.
+        self.lbl_filter_math = hint("")
+        self.lbl_filter_math.setObjectName("liveMath")
+        flayout.addRow(self.lbl_filter_math)
         outer.addWidget(filtering)
 
         outer.addStretch()
@@ -704,7 +775,7 @@ class MainWindow(QMainWindow):
             self.sp_trim_end.setValue(f.trim_end)
             self.cb_filter_mode.setCurrentText(f.filter.mode)
             self.ed_filter_target.setText(str(f.filter.target))
-            self.sp_filter_scalar.setValue(f.filter.scalar)
+            self.sp_group_size.setValue(f.filter.group_size)
             self.sp_filter_groups.setValue(f.filter.groups)
 
             self.cb_camera.setCurrentText(s.camera_model)
@@ -758,7 +829,7 @@ class MainWindow(QMainWindow):
         f.trim_end = self.sp_trim_end.value()
         f.filter.mode = self.cb_filter_mode.currentText()
         f.filter.target = self.ed_filter_target.text().strip() or "20%"
-        f.filter.scalar = self.sp_filter_scalar.value()
+        f.filter.group_size = self.sp_group_size.value()
         f.filter.groups = self.sp_filter_groups.value()
 
         s.enabled = self.chk_sfm.isChecked()
@@ -799,11 +870,19 @@ class MainWindow(QMainWindow):
             d.extra_run_args = []
         return cfg
 
+    def _connect_live_math(self) -> None:
+        """Recompute the live arithmetic whenever an input to it changes."""
+        for spin in (self.sp_fps, self.sp_group_size, self.sp_filter_groups):
+            spin.valueChanged.connect(self._schedule_refresh)
+        for dspin in (self.sp_trim_start, self.sp_trim_end):
+            dspin.valueChanged.connect(self._schedule_refresh)
+        self.cb_filter_mode.currentTextChanged.connect(self._schedule_refresh)
+
     def _sync_enabled_states(self) -> None:
         """Grey out controls that cannot affect the current configuration."""
         self.sp_width.setEnabled(self.cb_resolution.currentText() == "custom")
         mode = self.cb_filter_mode.currentText()
-        self.sp_filter_scalar.setEnabled(mode == "balanced")
+        self.sp_group_size.setEnabled(mode == "balanced")
         self.sp_filter_groups.setEnabled(mode == "custom")
 
         self.loop_group.setEnabled(self.cb_matcher.currentText() == "sequential-loop")
@@ -910,6 +989,7 @@ class MainWindow(QMainWindow):
     def _rebuild_tree(self) -> None:
         plan, error = self._current_plan()
         self.current_plan = plan
+        self._refresh_estimates(self._config_from_ui())
         self.tree.clear()
         self._step_items = []
 
@@ -944,6 +1024,58 @@ class MainWindow(QMainWindow):
             if total else "Every stage is disabled — nothing would run."
         )
         self.btn_start.setEnabled(total > 0 and self.thread is None)
+
+    # -- live arithmetic ---------------------------------------------------
+    def _frame_totals(self, cfg: Config) -> tuple[Optional[int], int, int, float]:
+        """(estimated frames, inputs measured, inputs we could not, seconds)."""
+        total = 0
+        measured = 0
+        unknown = 0
+        seconds = 0.0
+        for item in self.inputs:
+            if item.video is not None and cfg.frames.enabled:
+                count = estimate_extracted_frames(cfg.frames, item.video)
+                stats = probe_video(item.video)
+                if stats is not None:
+                    seconds += max(
+                        0.0,
+                        stats.duration - cfg.frames.trim_start - cfg.frames.trim_end,
+                    )
+            else:
+                # An existing project brings its own frames; count what is
+                # already on disk so the same arithmetic still applies.
+                images = item.project / "images"
+                count = sum(
+                    1 for entry in images.glob("*")
+                    if entry.suffix.lower() in (".jpg", ".jpeg", ".png")
+                ) if images.is_dir() else None
+                count = count or None
+            if count:
+                total += count
+                measured += 1
+            else:
+                unknown += 1
+        return (total or None), measured, unknown, seconds
+
+    def _refresh_estimates(self, cfg: Config) -> None:
+        estimate, measured, unknown, seconds = self._frame_totals(cfg)
+
+        if not self.inputs:
+            self.lbl_extract_math.setText(
+                "Add a clip to see how many frames these settings produce."
+            )
+        elif estimate is None:
+            self.lbl_extract_math.setText("Could not read the length of the input(s).")
+        else:
+            length = f"{seconds:.0f} s" if seconds < 90 else f"{seconds / 60:.1f} min"
+            footage = f" from {length} of footage" if seconds else ""
+            note = f" (+{unknown} unreadable)" if unknown else ""
+            self.lbl_extract_math.setText(
+                f"≈ {estimate:,} frames{footage} across {measured} input(s){note}, "
+                f"at {cfg.frames.sample_rate_fps} fps."
+            )
+
+        self.lbl_filter_math.setText(cfg.frames.filter.describe(estimate))
 
     def _set_step_status(self, index: int, status: str) -> None:
         if 0 <= index < len(self._step_items):
@@ -1149,6 +1281,7 @@ class MainWindow(QMainWindow):
         self.thread.step_finished.connect(self._on_step_finished)
         self.thread.done.connect(self._on_done)
         self.thread.start()
+        self._log_timer.start()
 
     def _stop(self) -> None:
         if self.thread is not None and self.thread.isRunning():
@@ -1170,7 +1303,13 @@ class MainWindow(QMainWindow):
         if rc == 0:
             self.progress.setValue(index + 1)
 
+    def _drain_log(self) -> None:
+        if self.thread is not None:
+            self.thread.flush_logs()
+
     def _on_done(self, success: bool, failed_index: int) -> None:
+        self._log_timer.stop()
+        self._drain_log()
         self._set_running(False)
         self.thread = None
         if success:

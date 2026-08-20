@@ -18,6 +18,7 @@ import cv2
 from tqdm import tqdm
 
 from .ascii_graph import draw_graph
+from .grouping import describe_selection
 
 
 class ImageSelector:
@@ -99,11 +100,7 @@ class ImageSelector:
 
         group_sizes, ideal_per_group = self.distribute_evenly(total, group_count)
         per_group, ideal_selected = self.distribute_evenly(target_count, group_count)
-        print(
-            f"Selecting {target_count} images across {group_count} groups, "
-            f"~{ideal_per_group:.1f} candidates per group and "
-            f"~{ideal_selected:.1f} kept per group (scalar {scalar})."
-        )
+        print(describe_selection(total, target_count, round(ideal_per_group)))
 
         selected: list[str] = []
         offset = 0

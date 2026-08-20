@@ -7,6 +7,7 @@ commit a machine to eight hours of work.
 
 from __future__ import annotations
 
+import functools
 import pathlib
 from dataclasses import dataclass, field
 from typing import Iterable, Optional
@@ -66,6 +67,58 @@ class Plan:
         if not lines:
             return "(nothing to do -- every stage is disabled or no input matched)"
         return "\n".join(lines).lstrip("\n")
+
+
+# ---------------------------------------------------------------------------
+# Cheap video probing (metadata only -- no frame is ever decoded)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class VideoStats:
+    fps: float
+    frame_count: int
+
+    @property
+    def duration(self) -> float:
+        return self.frame_count / self.fps if self.fps > 0 else 0.0
+
+
+@functools.lru_cache(maxsize=256)
+def _probe(path: str, fingerprint: tuple) -> Optional[VideoStats]:
+    import cv2   # local: the GUI must not pay for OpenCV at import time
+
+    cap = cv2.VideoCapture(path)
+    try:
+        if not cap.isOpened():
+            return None
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    finally:
+        cap.release()
+    if not fps or fps <= 0 or frames <= 0:
+        return None
+    return VideoStats(fps=float(fps), frame_count=frames)
+
+
+def probe_video(video: pathlib.Path) -> Optional[VideoStats]:
+    """Length and frame rate of a clip, cached on (path, size, mtime)."""
+    try:
+        stat = video.stat()
+    except OSError:
+        return None
+    return _probe(str(video), (stat.st_size, stat.st_mtime_ns))
+
+
+def estimate_extracted_frames(frames_cfg, video: pathlib.Path) -> Optional[int]:
+    """How many frames extraction will produce -- shown before anything runs."""
+    stats = probe_video(video)
+    if stats is None:
+        return None
+    usable = max(0.0, stats.duration - frames_cfg.trim_start - frames_cfg.trim_end)
+    if usable <= 0:
+        return 0
+    # Never more than the clip actually holds: asking for 60 fps out of a
+    # 30 fps capture still only yields 30.
+    return max(1, min(round(usable * frames_cfg.sample_rate_fps), round(usable * stats.fps)))
 
 
 # ---------------------------------------------------------------------------

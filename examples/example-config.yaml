@@ -30,8 +30,8 @@ frames:
   filter:
     mode: balanced       # balanced | quality | custom
     target: 20%          # a percentage, or an absolute count like 300
-    scalar: 2
-    groups: 20
+    group_size: 10       # balanced: frames per group, the sharpest of each survive
+    groups: 20           # custom: explicit group count
 
 sfm:
   enabled: true

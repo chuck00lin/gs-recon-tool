@@ -53,8 +53,19 @@ rest of it.
 |---|---|---|
 | `mode` | `balanced` | `balanced` (even coverage), `quality` (globally sharpest), `custom` |
 | `target` | `20%` | A percentage (`20%`) or an absolute count (`300`) |
-| `scalar` | `2` | `balanced` only: higher means fewer, larger groups |
+| `group_size` | `10` | `balanced` only: how many consecutive frames compete; the sharpest of each group survive |
 | `groups` | `20` | `custom` only: explicit group count |
+
+`group_size` is the only knob that shapes a balanced selection, and it is worth one
+sentence: at the default 20% target, groups of 10 mean *the sharpest 2 of every 10 frames
+are kept*. Match it to the keep rate — roughly `2 / keep_rate` — and the survivors stay
+evenly spread. Much larger and the two winners of a group can sit side by side, leaving a
+hole where the next group's losers were; much smaller and the sharpness test has nothing to
+choose between. The GUI computes this live under the control, using the real length of the
+clips you loaded, and `gs-recon plan` prints it in the filter step's note.
+
+It replaces 1.0.0's `scalar` (a power-of-two divisor on the group *count*). Configs written
+before 1.1.0 are migrated on load — `scalar: 2` at `target: 20%` becomes `group_size: 10`.
 
 ## `sfm`
 

@@ -52,8 +52,14 @@ def docker_base(
 
     Runs as the calling user so output files are owned by them rather than root
     -- the single most common source of "I can't delete my own results".
+
+    ``--init`` is not cosmetic: without it the container's PID 1 is a shell or
+    an entrypoint script, and the kernel does not apply default signal actions
+    to PID 1, so a stop request is silently ignored and training runs on. With
+    it, a real init forwards SIGTERM to the workload and the container exits in
+    well under a second.
     """
-    argv = ["docker", "run", "--rm", "--user", f"{env.uid()}:{env.gid()}"]
+    argv = ["docker", "run", "--rm", "--init", "--user", f"{env.uid()}:{env.gid()}"]
     if gpus:
         argv += ["--gpus", gpus]
     if ipc_host:

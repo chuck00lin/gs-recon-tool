@@ -214,6 +214,13 @@ def stylesheet(colors: dict[str, str]) -> str:
 
     QLabel#hint {{ color: {colors['text_dim']}; font-size: 12px; }}
     QLabel#sectionHint {{ color: {colors['text_dim']}; font-size: 12px; padding-bottom: 6px; }}
+    QLabel#liveMath {{
+        color: {colors['accent']};
+        font-size: 12px;
+        padding: 6px 8px;
+        border-left: 3px solid {colors['accent']};
+        background-color: {colors['surface']};
+    }}
     QLabel#statusPill {{
         border: 1px solid {colors['border']};
         border-radius: 12px;

@@ -7,6 +7,7 @@ import sys
 from typing import Optional
 
 from ..config import Config
+from ..tools.grouping import MIN_GROUP_SIZE
 from .base import Step
 
 TOOL_MODULE = "gs_recon.tools.frame_extract"
@@ -57,7 +58,7 @@ def build_frame_steps(
     else:
         filt += ["--target-count", str(max(1, int(f.filter.target_value())))]
     if f.filter.mode == "balanced":
-        filt += ["--scalar", str(max(1, f.filter.scalar))]
+        filt += ["--group-size", str(max(MIN_GROUP_SIZE, f.filter.group_size))]
     elif f.filter.mode == "custom":
         filt += ["--groups", str(max(1, f.filter.groups))]
 
@@ -77,8 +78,8 @@ def build_frame_steps(
             argv=filt,
             project=project,
             note=(
-                f"Keep the sharpest {f.filter.target} of the extracted frames "
-                f"(mode: {f.filter.mode}). Deletes the rest in place."
+                f"Keep the sharpest {f.filter.target} of the extracted frames. "
+                f"{f.filter.describe()} Deletes the rest in place."
             ),
         ),
     ]

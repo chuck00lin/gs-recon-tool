@@ -17,6 +17,7 @@ from typing import Any, Optional
 import yaml
 
 from . import env
+from .tools.grouping import DEFAULT_GROUP_SIZE, MIN_GROUP_SIZE, describe_selection
 
 CONFIG_VERSION = 1
 
@@ -66,16 +67,61 @@ class DockerConfig:
 
 @dataclass
 class FilterConfig:
+    """How the sharpest frames are chosen.
+
+    ``group_size`` is the only knob that shapes the selection in balanced mode:
+    every N consecutive frames form a group and the sharpest of each group
+    survive. It replaced an opaque ``scalar`` (a power-of-two divisor on the
+    group *count*) that nobody could reason about; old configs are migrated on
+    load, see ``_migrate_filter``.
+    """
+
     mode: str = "balanced"
     target: str = "20%"        # "20%" (percentage) or "300" (absolute count)
-    scalar: int = 2            # used by mode=balanced
-    groups: int = 20           # used by mode=custom
+    group_size: int = DEFAULT_GROUP_SIZE   # used by mode=balanced
+    groups: int = 20                       # used by mode=custom
 
     def target_is_percentage(self) -> bool:
         return str(self.target).strip().endswith("%")
 
     def target_value(self) -> float:
         return float(str(self.target).strip().rstrip("%"))
+
+    def keep_ratio(self) -> Optional[float]:
+        """Fraction of frames kept, when the target is expressed as one."""
+        try:
+            if self.target_is_percentage():
+                return max(0.0, min(1.0, self.target_value() / 100.0))
+        except ValueError:
+            return None
+        return None
+
+    def target_for(self, total: int) -> int:
+        """How many frames survive out of ``total``."""
+        try:
+            value = self.target_value()
+        except ValueError:
+            return total
+        count = total * value / 100.0 if self.target_is_percentage() else value
+        return max(1, min(total, int(count)))
+
+    def describe(self, total: Optional[int] = None) -> str:
+        """The live one-liner the GUI shows under the group-size control."""
+        if self.mode == "quality":
+            return "One group: the globally sharpest frames win, wherever they cluster."
+        if self.mode == "custom":
+            if total:
+                target = self.target_for(total)
+                per_group = target / max(1, self.groups)
+                return (
+                    f"{total:,} frames → {self.groups:,} fixed groups of "
+                    f"~{total / max(1, self.groups):.0f} → keep the sharpest "
+                    f"~{per_group:.1f} per group ≈ {target:,} frames."
+                )
+            return f"A fixed {self.groups} groups, whatever the frame count."
+        if total:
+            return describe_selection(total, self.target_for(total), self.group_size)
+        return describe_selection(None, None, self.group_size, ratio=self.keep_ratio())
 
 
 @dataclass
@@ -164,7 +210,7 @@ class Config:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
-        return _from_dict(cls, data or {})
+        return _from_dict(cls, _migrate_filter(data or {}))
 
     @classmethod
     def load(cls, path: pathlib.Path) -> "Config":
@@ -207,6 +253,10 @@ class Config:
             problems.append("frames.jpeg_quality must be between 1 and 100")
         if self.frames.filter.mode not in FILTER_MODES:
             problems.append(f"frames.filter.mode must be one of {FILTER_MODES}")
+        if self.frames.filter.group_size < MIN_GROUP_SIZE:
+            problems.append(f"frames.filter.group_size must be >= {MIN_GROUP_SIZE}")
+        if self.frames.filter.groups < 1:
+            problems.append("frames.filter.groups must be >= 1")
         try:
             value = self.frames.filter.target_value()
             if value <= 0:
@@ -241,6 +291,39 @@ class Config:
         if not (self.frames.enabled or self.sfm.enabled or self.splat.enabled):
             problems.append("all three stages are disabled -- nothing to run")
         return problems
+
+
+# ---------------------------------------------------------------------------
+def _migrate_filter(data: dict[str, Any]) -> dict[str, Any]:
+    """Translate the retired ``frames.filter.scalar`` into ``group_size``.
+
+    scalar s meant "keep 2**(s-1) frames per group", so the equivalent group
+    size depends on how many frames are kept overall: at 20% and scalar 2 the
+    filter kept 2 of every 10 frames, which is group_size 10. Rejecting the old
+    key instead would break every config written before 1.1.
+    """
+    filter_data = ((data.get("frames") or {}).get("filter") or {})
+    if not isinstance(filter_data, dict) or "scalar" not in filter_data:
+        return data
+
+    data = copy.deepcopy(data)
+    filter_data = data["frames"]["filter"]
+    scalar = filter_data.pop("scalar")
+    if "group_size" in filter_data:
+        return data
+    try:
+        keep_per_group = 2 ** (max(1, int(scalar)) - 1)
+    except (TypeError, ValueError):
+        keep_per_group = 2
+    target = str(filter_data.get("target", FilterConfig.target)).strip()
+    ratio = 0.2
+    if target.endswith("%"):
+        try:
+            ratio = max(0.01, min(1.0, float(target.rstrip("%")) / 100.0))
+        except ValueError:
+            pass
+    filter_data["group_size"] = max(MIN_GROUP_SIZE, round(keep_per_group / ratio))
+    return data
 
 
 # ---------------------------------------------------------------------------

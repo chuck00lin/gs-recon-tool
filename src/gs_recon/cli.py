@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import pathlib
+import signal
 import sys
 from typing import Optional
 
@@ -337,8 +339,38 @@ def cmd_run(args) -> int:
         ensure_project_dirs(plan)
 
     runner = Runner(plan, dry_run=args.dry_run)
-    result = runner.run(start_from=start_index)
+    with _interruptible(runner):
+        result = runner.run(start_from=start_index)
     return 0 if result.success else 1
+
+
+@contextlib.contextmanager
+def _interruptible(runner: "Runner"):
+    """Route Ctrl-C into runner.stop() instead of leaving containers running.
+
+    The child runs in its own session so the terminal's SIGINT never reaches
+    it; without this, Ctrl-C unwinds Python while the container keeps training.
+    """
+    def handle(signum, frame):
+        if runner.stopping:
+            signal.signal(signal.SIGINT, previous)
+            raise KeyboardInterrupt
+        print(
+            "\n[info] Ctrl-C -- stopping after the current command is "
+            "terminated. Press again to abort immediately.",
+            file=sys.stderr, flush=True,
+        )
+        runner.stop()
+
+    try:
+        previous = signal.signal(signal.SIGINT, handle)
+    except ValueError:      # not the main thread; leave signals alone
+        yield
+        return
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, previous)
 
 
 def cmd_gui(args) -> int:
